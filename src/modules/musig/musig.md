@@ -41,7 +41,7 @@ Let `n` signers each have a keypair `(x_i, X_i)` for `i` ranging from 0 to
 
     P = sum_i µ_i*X_i = sum_i Y_i
 
-were `µ_i = H(L || i)`, where `H` is a collision-resistant hash function
+where `µ_i = H(L || i)`, where `H` is a collision-resistant hash function
 and `L` is a hash of all public keys in some canonical order. We refer to
 the coefficient `µ_i` as the _MuSig coefficient_ of the key, and to the
 key `Y_i = µ_i*X_i` as the _tweaked public key_.
@@ -76,8 +76,11 @@ four steps.
    produced in steps 2 and 3. (That is, on the first invocation it outputs
    keys, which it updates on subsequent invocations until all participants'
    shards and coefficients have been taken into account.)
-6. [TODO] She signs the each set of coefficients and broadcasts her signatures.
-7. [TODO] each participant verifies each others' signatures.
+6. [TODO] She signs the each set of coefficients, and the curvepoint corresponding to each keyshard and broadcasts her signatures.
+7. [TODO] Each participant verifies each others' signatures:
+   1. If the signature doesn't match the received data, there is a communication failure with that node.
+   2. If the curvepoint for the keyshard does not correspond to the the value calculated from the public coefficients, the node providing the keyshard is cheating.
+
 
 Key Generation Flowchart:
 ```
@@ -102,30 +105,33 @@ verify_signature
 
 ### Signing Procedure
 
-To produce a signature, each signer `i` acts as follows.
+A group of at least `x` signers (`k <= x <= n`) can produce a signature,
+provided each signer `i` acts as follows.
 
 1. Produces a nonce pair `(k_i, R_i)` and a commitment (hash) `C_i` to `R_i`.
    This is done with `secp256k1_musig_multisig_generate_nonce`. Sends the
    commitment `C_i` to every other signer.
-2. Once at least `k` nonce commitments have been received from other signers,
-   signer `i` creates `n` `secp256k1_musig_signer_data` structures, one for
+2. Once all nonce commitments have been received from other participating signers,
+   signer `i` creates `x` `secp256k1_musig_signer_data` structures, one for
    each signer including herself.
    She initializes each with `secp256k1_musig_signer_data_initialize` which
    takes a public key from all signers and a nonce commitment from present
    signers. If `k = n`, the public key should be `Y_i` from step 2 of the key
-   setup; otherwise it should be the modified `Y_i` from step 5 of key setup.
+   setup; otherwise it should be the modified `Z_i` from step 5 of key setup.
 3. She sends her actual public nonce `R_i` to every other signer.
 4. Upon receipt of another signer's public nonce, she calls `secp256k1_musig_set_nonce`
    to update that signer's data structure. If the public nonce does not match
    the precommitment, this function will fail and the signer will be considered
    not to be present.
-5. Once `k` valid public nonces have been received, she can produce a partial
+5. Once at least `k` valid public nonces have been received, she can produce a partial
    signature using `secp256k1_musig_partial_sign`. She sends this partial signature
    to someone (or everyone) for aggregation.
 6. Some participant receives all the partial signatures and combines them using
    `secp256k1_musig_combine_partial_sigs`. The output of this function is a
    complete signature. If the signature is invalid, at least one of the partial
-   signatures was invalid. The culprit may be identified using the function
+   signatures was invalid,
+   or was generated using a different subset of the `x` expected signers.
+   The culprit may be identified using the function
    `secp256k1_musig_partial_sig_verify` on the individual partial signatures.
 
 Signing Procedure Flowchart:
